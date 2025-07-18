@@ -1,0 +1,5 @@
+.env
+.qodo
+node_modules/
+eng.traineddata
+spa.traineddata

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detector de Placas en Tiempo Real</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .camera-container {
+        position: relative;
+        width: 100%;
+        margin-bottom: 20px;
+      }
+      #videoElement {
+        width: 100%;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        background-color: #f0f0f0;
+      }
+      #canvasElement {
+        display: none;
+      }
+      .controls {
+        margin: 20px 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      button {
+        padding: 8px 16px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      #resultado {
+        margin-top: 20px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        min-height: 50px;
+      }
+      .file-upload {
+        margin-top: 20px;
+        border-top: 1px solid #ddd;
+        padding-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Detector de Placas en Tiempo Real</h1>
+    
+    <div class="camera-container">
+      <video id="videoElement" autoplay playsinline></video>
+      <canvas id="canvasElement"></canvas>
+    </div>
+    
+    <div class="controls">
+      <button id="startCamera">Iniciar Cámara</button>
+      <button id="stopCamera" disabled>Detener Cámara</button>
+      <button id="startStream" disabled>Iniciar Análisis en Tiempo Real</button>
+      <button id="stopStream" disabled>Detener Análisis</button>
+    </div>
+    
+    <div id="resultado">Los resultados del análisis aparecerán aquí</div>
+    
+    <div id="stats" style="margin-top: 20px; padding: 10px; background: #f9f9f9; border-radius: 5px; font-family: monospace; font-size: 12px;">
+      <div>📊 Estadísticas en tiempo real:</div>
+      <div id="statsContent">Inicie el análisis para ver estadísticas</div>
+    </div>
+    
+    <div class="file-upload">
+      <h3>O sube una imagen manualmente</h3>
+      <form id="formulario">
+        <input
+          type="file"
+          id="imageInput"
+          accept="image/*"
+          capture="environment"
+          onchange="previewImage(event)"
+        />
+        <button type="submit">Analizar Imagen</button>
+      </form>
+      <img alt="imagen subida" id="imagenSubida" style="display: none; max-width: 100%; margin-top: 10px;" />
+    </div>
+
+    <script src="./main.js"></script>
+  </body>
+</html>
