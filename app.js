@@ -7,6 +7,9 @@ import { fileURLToPath } from "url";
 import morgan from "morgan";
 import { dirname, join } from "path";
 import { getRotationStats } from "./services/geminiService.js";
+import { DetectionService } from "./services/DetectionService.js";
+import { createServer } from "http";
+import { initializeSocketServer } from "./socket/SocketServer.js";
 
 // Importar dotenv para manejar variables de entorno
 import dotenv from "dotenv";
@@ -46,10 +49,23 @@ app.get("/api/stats", (req, res) => {
 // Convertir `import.meta.url` a __dirname (compatible con ES Modules)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// Vista
-app.use(express.static(join(__dirname, "views")));
+// El frontend se sirve desde front-irix, no desde el backend
 
 const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+
+// Crear servidor HTTP para Socket.IO
+const server = createServer(app);
+
+// Inicializar Socket.IO para detección de placas en tiempo real
+await initializeSocketServer(server);
+
+server.listen(PORT, async () => {
+  console.log(`🚀 Servidor HTTP corriendo en http://localhost:${PORT}`);
+  console.log(`🔌 Socket.IO activo en http://localhost:${PORT}`);
+  
+  // Inicializar servicio de detección de placas
+  console.log('⚡ Inicializando modelo de detección de placas...');
+  const detectionService = new DetectionService();
+  await detectionService.initialize();
+  console.log('✅ Sistema de detección de placas listo!');
 });

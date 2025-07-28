@@ -1,21 +1,34 @@
 import { Router } from "express";
 const router = Router();
-import multer, { memoryStorage } from "multer";
-import { detectPlate } from "../controllers/imageController.js";
 
-// Configuración de multer (archivo temporal)
-const storage = memoryStorage(); // no guarda en disco
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB para permitir imágenes de mayor calidad
-  fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("Archivo inválido"));
+/**
+ * DETECCIÓN DE PLACAS VÍA SOCKET.IO
+ * 
+ * ✅ Las imágenes se procesan en tiempo real vía Socket.IO
+ * ❌ No se necesita multer ni rutas HTTP para imágenes
+ * 
+ * Flujo actual:
+ * 1. Frontend captura imagen → Blob/ArrayBuffer
+ * 2. SocketService.sendImageForAnalysis() → Envía vía socket
+ * 3. ImageHandler.processImageFromSocket() → Procesa directamente
+ * 4. DetectionService.detectPlate() → Retorna resultado
+ */
+
+// Endpoint de estado del servicio
+router.get("/status", (req, res) => {
+  res.json({ 
+    service: "Detección de Placas Vehiculares",
+    method: "Socket.IO Real-time",
+    status: "active",
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      socketConnection: "ws://localhost:3000",
+      events: {
+        send: "analyze-image",
+        receive: "analysis-result"
+      }
     }
-    cb(null, true);
-  },
+  });
 });
-
-router.post("/upload", upload.single("image"), detectPlate);
 
 export default router;

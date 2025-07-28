@@ -2,12 +2,7 @@ import "dotenv/config";
 import { env } from "process";
 
 // Configuración de API keys y versiones
-const API_KEYS = [
-  env.API_KEY,
-  env.API_KEY2,
-  env.API_KEY3,
-  env.API_KEY4
-];
+const API_KEYS = [env.API_KEY, env.API_KEY2, env.API_KEY3, env.API_KEY4];
 
 const VERSIONS = ["2.0", "2.5"];
 
@@ -30,10 +25,11 @@ let failedRequests = 0;
 
 // Función para obtener estadísticas
 export function getRotationStats() {
-  const avgProcessingTime = processingTimes.length > 0 
-    ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length 
-    : 0;
-  
+  const avgProcessingTime =
+    processingTimes.length > 0
+      ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
+      : 0;
+
   return {
     totalRequests: requestCount,
     successfulRequests,
@@ -47,7 +43,7 @@ export function getRotationStats() {
     totalKeys: API_KEYS.length,
     totalVersions: VERSIONS.length,
     maxRequestsPerMinute: API_KEYS.length * VERSIONS.length * 15, // 4 keys x 2 versions x 15 req/min
-    maxConcurrentRequests: MAX_CONCURRENT_REQUESTS
+    maxConcurrentRequests: MAX_CONCURRENT_REQUESTS,
   };
 }
 
@@ -56,10 +52,10 @@ function processQueue() {
   if (requestQueue.length === 0 || activeRequests >= MAX_CONCURRENT_REQUESTS) {
     return;
   }
-  
+
   const { resolve, reject, buffer, options } = requestQueue.shift();
   activeRequests++;
-  
+
   executeGeminiRequest(buffer, options)
     .then(resolve)
     .catch(reject)
@@ -72,16 +68,16 @@ function processQueue() {
 // Función interna para ejecutar petición a Gemini
 async function executeGeminiRequest(buffer, options = {}) {
   const startTime = Date.now();
-  
+
   try {
     const result = await getGeminiReplyInternal(buffer, options);
-    
+
     // Métricas
     const processingTime = Date.now() - startTime;
     processingTimes.push(processingTime);
     if (processingTimes.length > 100) processingTimes.shift(); // Mantener solo últimas 100
     successfulRequests++;
-    
+
     return result;
   } catch (error) {
     failedRequests++;
@@ -93,19 +89,21 @@ async function executeGeminiRequest(buffer, options = {}) {
 function getNextEndpoint() {
   const currentKey = API_KEYS[currentKeyIndex];
   const currentVersion = VERSIONS[currentVersionIndex];
-  
+
   const endpoint = `${env.URI_BASE}${currentVersion}-flash:generateContent?key=${currentKey}`;
-  
-  console.log(`🔑 Usando API Key ${currentKeyIndex + 1} con versión ${currentVersion}`);
-  
+
+  console.log(
+    `🔑 Usando API Key ${currentKeyIndex + 1} con versión ${currentVersion}`
+  );
+
   // Rotar versión
   currentVersionIndex = (currentVersionIndex + 1) % VERSIONS.length;
-  
+
   // Si completamos el ciclo de versiones, rotar API key
   if (currentVersionIndex === 0) {
     currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
   }
-  
+
   return endpoint;
 }
 
@@ -117,11 +115,11 @@ function getNextEndpoint() {
  */
 export const getGeminiReply = async (buffer, options = {}) => {
   requestCount++;
-  
+
   // Si podemos procesar inmediatamente, hacerlo
   if (activeRequests < MAX_CONCURRENT_REQUESTS) {
     activeRequests++;
-    
+
     try {
       const result = await executeGeminiRequest(buffer, options);
       return result;
@@ -130,11 +128,13 @@ export const getGeminiReply = async (buffer, options = {}) => {
       processQueue(); // Procesar siguiente en cola
     }
   }
-  
+
   // Si no, agregar a la cola
   return new Promise((resolve, reject) => {
     requestQueue.push({ resolve, reject, buffer, options });
-    console.log(`⏳ Petición agregada a cola. Cola: ${requestQueue.length}, Activas: ${activeRequests}`);
+    console.log(
+      `⏳ Petición agregada a cola. Cola: ${requestQueue.length}, Activas: ${activeRequests}`
+    );
   });
 };
 
@@ -171,21 +171,21 @@ async function getGeminiReplyInternal(buffer, options = {}) {
 
   // Obtener el próximo endpoint con rotación
   const endpoint = getNextEndpoint();
-  
+
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-      body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: 0.1, // Mínimo para máxima velocidad y consistencia
-          topK: 16, // Reducido para velocidad
-          topP: 0.8, // Reducido para velocidad
-          maxOutputTokens: 64, // Mínimo necesario para placas
-        },
-      }),
+    body: JSON.stringify({
+      contents,
+      generationConfig: {
+        temperature: 0.1, // Mínimo para máxima velocidad y consistencia
+        topK: 16, // Reducido para velocidad
+        topP: 0.8, // Reducido para velocidad
+        maxOutputTokens: 64, // Mínimo necesario para placas
+      },
+    }),
   });
 
   if (!response.ok) {
@@ -198,8 +198,8 @@ async function getGeminiReplyInternal(buffer, options = {}) {
   }
 
   const data = await response.json();
-  console.log("🚀 ~ getGeminiReply ~ data:", data);
 
   const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
   return reply;
 }
