@@ -203,21 +203,39 @@ export class ImageHandler {
     }
 
     /**
-     * Preprocesa la imagen usando Sharp
-     * @param {Buffer} imageBuffer - Buffer de imagen original
+     * Preprocesa la imagen usando Sharp - Simplificado para WebP/JPEG
+     * @param {Buffer} imageBuffer - Buffer de imagen original (ya viene 300x300 del frontend)
      * @returns {Promise<Buffer>} Buffer de imagen procesada
      */
     async _preprocessImage(imageBuffer) {
         try {
-            // Redimensionar a 300x300 como especifica el plan
-            const processedBuffer = await sharp(imageBuffer)
-                .resize(IMAGE_CONFIG.EXPECTED_DIMENSIONS.width, IMAGE_CONFIG.EXPECTED_DIMENSIONS.height, {
+            const sharpInstance = sharp(imageBuffer);
+            const metadata = await sharpInstance.metadata();
+            
+            console.log(`📥 Imagen recibida: ${metadata.format?.toUpperCase()} ${metadata.width}x${metadata.height}`);
+            
+            // El frontend ya envía 300x300, solo validamos dimensiones por seguridad
+            const expectedSize = IMAGE_CONFIG.EXPECTED_DIMENSIONS.width;
+            const needsResize = metadata.width !== expectedSize || metadata.height !== expectedSize;
+            
+            if (needsResize) {
+                console.log(`⚠️ Redimensionando ${metadata.width}x${metadata.height} → ${expectedSize}x${expectedSize}`);
+            }
+            
+            // Procesar según formato: WebP o JPEG (fallback)
+            const processedBuffer = await sharpInstance
+                .resize(expectedSize, expectedSize, {
                     fit: 'fill',
-                    background: { r: 0, g: 0, b: 0, alpha: 1 }
+                    background: { r: 0, g: 0, b: 0, alpha: 1 },
+                    withoutEnlargement: !needsResize // No redimensionar si ya es correcto
                 })
-                .jpeg({ quality: 90 })
+                .jpeg({ 
+                    quality: metadata.format === 'webp' ? 95 : 90, // Mejor calidad para WebP convertido
+                    progressive: true
+                })
                 .toBuffer();
 
+            console.log(`✅ Procesada: ${(processedBuffer.length/1024).toFixed(2)}KB`);
             return processedBuffer;
 
         } catch (error) {
