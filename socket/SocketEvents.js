@@ -45,11 +45,21 @@ const SOCKET_CONFIG = {
 const IMAGE_CONFIG = {
   MAX_SIZE: 5 * 1024 * 1024, // 5MB máximo por imagen
   ALLOWED_FORMATS: ["image/jpeg", "image/png", "image/webp"],
+  PREFERRED_FORMAT: "image/webp", // Formato preferido para mejor performance
+  WEBP_QUALITY: 0.9, // Calidad WebP (0.9 = 90%)
+  JPEG_FALLBACK_QUALITY: 0.85, // Calidad JPEG como fallback
   PROCESSING_TIMEOUT: 10000, // 10 segundos timeout
   EXPECTED_DIMENSIONS: {
     width: 300,
     height: 300,
   },
+  // Configuraciones de optimización
+  OPTIMIZATION: {
+    ENABLE_WEBP: true,
+    ENABLE_COMPRESSION: true,
+    ENABLE_MEMORY_CLEANUP: true,
+    TARGET_FILE_SIZE: 15 * 1024 // 15KB target (vs 36KB actual)
+  }
 };
 
 // Estados del servidor
