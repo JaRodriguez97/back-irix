@@ -176,6 +176,9 @@ export class TensorFlowAdapter {
         console.warn(`⚠️ Inferencia lenta: ${inferenceTime}ms (target: ${this.config.PERFORMANCE.MAX_INFERENCE_TIME}ms)`);
       }
 
+      // ⚡ OPTIMIZACIÓN CRÍTICA: Limpieza inmediata de memoria
+      this._forceTensorCleanup();
+
       return prediction;
 
     } catch (error) {

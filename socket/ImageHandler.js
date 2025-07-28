@@ -203,7 +203,7 @@ export class ImageHandler {
     }
 
     /**
-     * Preprocesa la imagen usando Sharp - Simplificado para WebP/JPEG
+     * Preprocesa la imagen usando Sharp - PRESERVA FORMATO ORIGINAL
      * @param {Buffer} imageBuffer - Buffer de imagen original (ya viene 300x300 del frontend)
      * @returns {Promise<Buffer>} Buffer de imagen procesada
      */
@@ -212,7 +212,8 @@ export class ImageHandler {
             const sharpInstance = sharp(imageBuffer);
             const metadata = await sharpInstance.metadata();
             
-            console.log(`📥 Imagen recibida: ${metadata.format?.toUpperCase()} ${metadata.width}x${metadata.height}`);
+            const originalSizeKB = (imageBuffer.length / 1024).toFixed(2);
+            console.log(`📥 Imagen recibida: ${metadata.format?.toUpperCase()} ${metadata.width}x${metadata.height} (${originalSizeKB}KB)`);
             
             // El frontend ya envía 300x300, solo validamos dimensiones por seguridad
             const expectedSize = IMAGE_CONFIG.EXPECTED_DIMENSIONS.width;
@@ -222,20 +223,36 @@ export class ImageHandler {
                 console.log(`⚠️ Redimensionando ${metadata.width}x${metadata.height} → ${expectedSize}x${expectedSize}`);
             }
             
-            // Procesar según formato: WebP o JPEG (fallback)
-            const processedBuffer = await sharpInstance
-                .resize(expectedSize, expectedSize, {
-                    fit: 'fill',
-                    background: { r: 0, g: 0, b: 0, alpha: 1 },
-                    withoutEnlargement: !needsResize // No redimensionar si ya es correcto
-                })
-                .jpeg({ 
-                    quality: metadata.format === 'webp' ? 95 : 90, // Mejor calidad para WebP convertido
-                    progressive: true
-                })
-                .toBuffer();
-
-            console.log(`✅ Procesada: ${(processedBuffer.length/1024).toFixed(2)}KB`);
+            // 🎯 PRESERVAR FORMATO ORIGINAL - NO RECODIFICAR
+            let processedBuffer;
+            const resizedInstance = sharpInstance.resize(expectedSize, expectedSize, {
+                fit: 'fill',
+                background: { r: 0, g: 0, b: 0, alpha: 1 },
+                withoutEnlargement: !needsResize // No redimensionar si ya es correcto
+            });
+            
+            if (metadata.format === 'webp') {
+                // 🎯 MANTENER WebP - MÁS EFICIENTE
+                processedBuffer = await resizedInstance
+                    .webp({ 
+                        quality: 90, // Calidad alta pero sin recodificar innecesariamente
+                        effort: 4,   // Balance velocidad/compresión
+                        lossless: false
+                    })
+                    .toBuffer();
+                console.log(`✅ WebP preservado: ${originalSizeKB}KB → ${(processedBuffer.length/1024).toFixed(2)}KB`);
+            } else {
+                // 🔄 Fallback a JPEG para otros formatos
+                processedBuffer = await resizedInstance
+                    .jpeg({ 
+                        quality: 90,
+                        progressive: true,
+                        mozjpeg: true // Mejor compresión JPEG
+                    })
+                    .toBuffer();
+                console.log(`🔄 Convertido a JPEG: ${originalSizeKB}KB → ${(processedBuffer.length/1024).toFixed(2)}KB`);
+            }
+            
             return processedBuffer;
 
         } catch (error) {
