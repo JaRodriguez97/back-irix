@@ -44,10 +44,15 @@ export const MODEL_CONFIG = {
   // Performance y optimización
   PERFORMANCE: {
     TARGET_FPS: 2,
-    MAX_INFERENCE_TIME: 500,    // ms
-    MAX_MEMORY_MB: 200,
+    MAX_INFERENCE_TIME: 200,    // 🚀 OPTIMIZADO: Reducido de 500ms a 200ms
+    MAX_MEMORY_MB: 150,         // 🚀 OPTIMIZADO: Reducido de 200MB a 150MB
     BATCH_SIZE: 1,              // Procesamiento individual
-    USE_GPU: false              // Inicialmente CPU only
+    USE_GPU: false,             // Inicialmente CPU only
+    // 🚀 NUEVAS OPTIMIZACIONES:
+    ENABLE_TENSOR_POOLING: true,
+    ENABLE_MODEL_CACHE: true,
+    AGGRESSIVE_CLEANUP: true,
+    WARMUP_ITERATIONS: 2        // Reducido de 3 a 2
   },
 
   // Rutas de modelos

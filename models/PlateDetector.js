@@ -294,15 +294,22 @@ export class PlateDetector {
       console.warn('⚠️ Modelo remoto no disponible, creando modelo base');
     }
 
-    // Crear modelo base como fallback
-    console.log('🏗️ Creando modelo MobileNet base...');
-    return await this.tfAdapter.createMobileNetBase();
+    // 🚀 OPTIMIZACIÓN: Intentar crear modelo optimizado primero
+    try {
+      console.log('🚀 Intentando crear modelo MobileNetV2 optimizado...');
+      return await this.tfAdapter.createOptimizedMobileNet();
+    } catch (error) {
+      console.warn('⚠️ Modelo optimizado falló, usando modelo básico...');
+      console.log('🏗️ Creando modelo MobileNet base...');
+      return await this.tfAdapter.createMobileNetBase();
+    }
   }
 
   async _warmupModel() {
     console.log('🔥 Realizando warmup del modelo...');
 
-    const warmupRuns = 3;
+    // 🚀 OPTIMIZADO: Usar configuración dinámica
+    const warmupRuns = this.config.PERFORMANCE.WARMUP_ITERATIONS || 2;
     const dummyImage = Buffer.alloc(300 * 300 * 3, 128); // Imagen gris 300x300
 
     for (let i = 0; i < warmupRuns; i++) {
@@ -313,12 +320,16 @@ export class PlateDetector {
         // Limpiar inmediatamente
         cleanupTensors([tensor, prediction]);
         
+        if (this.config.LOGGING.ENABLE_PERFORMANCE_LOG) {
+          console.log(`⚡ Warmup ${i + 1}/${warmupRuns} completado`);
+        }
+        
       } catch (error) {
         console.warn(`⚠️ Error en warmup run ${i + 1}:`, error.message);
       }
     }
 
-    console.log('✅ Warmup completado');
+    console.log('✅ Warmup completado - modelo listo para inferencia óptima');
   }
 
   _updateStats(processingTime, success) {

@@ -5,6 +5,7 @@
 
 import * as tf from '@tensorflow/tfjs';
 import { MODEL_CONFIG, getConfig } from '../models/modelConfig.js';
+import OptimizedMobileNet from '../models/OptimizedMobileNet.js';
 
 export class TensorFlowAdapter {
   constructor(environment = 'development') {
@@ -15,6 +16,25 @@ export class TensorFlowAdapter {
       initial: null,
       current: null,
       peak: null
+    };
+    
+    // 🚀 OPTIMIZACIÓN: Tensor Pool para reutilización
+    this.tensorPool = {
+      inputTensors: [],
+      outputTensors: [],
+      maxPoolSize: 5
+    };
+    
+    // 🚀 OPTIMIZACIÓN: Model Cache
+    this.modelCache = new Map();
+    
+    // 🚀 OPTIMIZACIÓN: Performance Metrics
+    this.performanceMetrics = {
+      inferenceCount: 0,
+      totalInferenceTime: 0,
+      averageInferenceTime: 0,
+      memoryLeaksDetected: 0,
+      tensorsReused: 0
     };
   }
 
@@ -83,6 +103,43 @@ export class TensorFlowAdapter {
   }
 
   /**
+   * 🚀 NUEVO: Crea modelo MobileNetV2 optimizado específico para placas
+   * @returns {Promise<tf.LayersModel>} Modelo optimizado con mejores prestaciones
+   */
+  async createOptimizedMobileNet() {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    try {
+      console.log('🚀 Creando modelo MobileNetV2 optimizado...');
+      
+      const optimizedMobileNet = new OptimizedMobileNet(this.config);
+      const model = await optimizedMobileNet.createOptimizedModel();
+      
+      // Cachear el modelo optimizado
+      this.modelCache.set('optimized_mobilenet', {
+        model: model,
+        optimizer: optimizedMobileNet,
+        createdAt: Date.now(),
+        info: optimizedMobileNet.getModelInfo()
+      });
+      
+      console.log('✅ Modelo MobileNetV2 optimizado creado exitosamente');
+      console.log('📊 Información del modelo:', optimizedMobileNet.getModelInfo());
+      
+      return model;
+      
+    } catch (error) {
+      console.error('❌ Error creando modelo optimizado:', error);
+      console.warn('⚠️ Fallback al modelo básico temporal...');
+      
+      // Fallback al modelo básico
+      return await this.createMobileNetBase();
+    }
+  }
+
+  /**
    * Carga modelo preentrenado de placas desde URL
    * @returns {Promise<tf.LayersModel>} Modelo preentrenado listo para usar
    */
@@ -145,7 +202,7 @@ export class TensorFlowAdapter {
   }
 
   /**
-   * Ejecuta inferencia optimizada
+   * Ejecuta inferencia optimizada con Tensor Pool
    * @param {tf.Tensor} inputTensor - Tensor de entrada
    * @param {tf.LayersModel} model - Modelo para inferencia
    * @returns {Promise<tf.Tensor>} Resultado de la predicción
@@ -157,18 +214,33 @@ export class TensorFlowAdapter {
 
     const startTime = Date.now();
     let prediction = null;
+    let reusedTensor = false;
 
     try {
-      // Ejecutar predicción
-      prediction = model.predict(inputTensor);
+      // 🚀 OPTIMIZACIÓN: Intentar reutilizar tensor del pool
+      const pooledTensor = this._getTensorFromPool('input', inputTensor.shape);
+      let processedInput = inputTensor;
+      
+      if (pooledTensor) {
+        // Copiar datos al tensor reutilizado
+        pooledTensor.assign(inputTensor);
+        processedInput = pooledTensor;
+        reusedTensor = true;
+        this.performanceMetrics.tensorsReused++;
+      }
 
-      // Registrar estadísticas de performance
+      // Ejecutar predicción
+      prediction = model.predict(processedInput);
+
+      // 🚀 OPTIMIZACIÓN: Actualizar métricas de performance
       const inferenceTime = Date.now() - startTime;
+      this._updatePerformanceMetrics(inferenceTime);
       this._updateMemoryStats();
 
       if (this.config.LOGGING.ENABLE_PERFORMANCE_LOG) {
-        console.log(`⚡ Inferencia completada en ${inferenceTime}ms`);
+        console.log(`⚡ Inferencia completada en ${inferenceTime}ms (Tensor reusado: ${reusedTensor})`);
         console.log(`💾 Memoria actual: ${this.memoryStats.current.numBytes} bytes`);
+        console.log(`📊 Promedio inferencia: ${this.performanceMetrics.averageInferenceTime}ms`);
       }
 
       // Validar tiempo de inferencia
@@ -176,8 +248,13 @@ export class TensorFlowAdapter {
         console.warn(`⚠️ Inferencia lenta: ${inferenceTime}ms (target: ${this.config.PERFORMANCE.MAX_INFERENCE_TIME}ms)`);
       }
 
-      // ⚡ OPTIMIZACIÓN CRÍTICA: Limpieza inmediata de memoria
-      this._forceTensorCleanup();
+      // 🚀 OPTIMIZACIÓN: Devolver tensor al pool para reutilización
+      if (reusedTensor) {
+        this._returnTensorToPool('input', processedInput);
+      }
+
+      // ⚡ OPTIMIZACIÓN CRÍTICA: Limpieza selectiva de memoria
+      this._optimizedMemoryCleanup();
 
       return prediction;
 
@@ -345,6 +422,156 @@ export class TensorFlowAdapter {
     const maxMemoryMB = this.config.PERFORMANCE.MAX_MEMORY_MB * 1024 * 1024;
 
     return memoryIncrease > maxMemoryMB;
+  }
+
+  /**
+   * Fuerza limpieza inmediata de tensores para evitar memory leaks
+   * @private
+   */
+  _forceTensorCleanup() {
+    try {
+      // Ejecutar garbage collection de tensores no utilizados
+      const memoryBefore = tf.memory();
+      
+      // Forzar limpieza de tensores
+      tf.dispose();
+      
+      // Actualizar estadísticas de memoria
+      this._updateMemoryStats();
+      
+      const memoryAfter = tf.memory();
+      const memoryFreed = memoryBefore.numBytes - memoryAfter.numBytes;
+      
+      if (this.config.LOGGING.ENABLE_PERFORMANCE_LOG && memoryFreed > 0) {
+        console.log(`🧧 Memoria liberada: ${(memoryFreed / 1024).toFixed(2)}KB`);
+      }
+      
+    } catch (error) {
+      console.warn('⚠️ Error en limpieza de tensores:', error.message);
+    }
+  }
+
+  /**
+   * 🚀 OPTIMIZACIÓN: Obtiene tensor del pool o crea uno nuevo
+   * @private
+   */
+  _getTensorFromPool(type, shape) {
+    const pool = type === 'input' ? this.tensorPool.inputTensors : this.tensorPool.outputTensors;
+    
+    // Buscar tensor compatible en el pool
+    for (let i = 0; i < pool.length; i++) {
+      const tensor = pool[i];
+      if (this._shapeEquals(tensor.shape, shape)) {
+        // Remover del pool y retornar
+        pool.splice(i, 1);
+        return tensor;
+      }
+    }
+    
+    return null; // No hay tensor compatible
+  }
+
+  /**
+   * 🚀 OPTIMIZACIÓN: Devuelve tensor al pool para reutilización
+   * @private
+   */
+  _returnTensorToPool(type, tensor) {
+    const pool = type === 'input' ? this.tensorPool.inputTensors : this.tensorPool.outputTensors;
+    
+    // Solo agregar si el pool no está lleno
+    if (pool.length < this.tensorPool.maxPoolSize) {
+      pool.push(tensor);
+    } else {
+      // Pool lleno, liberar tensor
+      tensor.dispose();
+    }
+  }
+
+  /**
+   * 🚀 OPTIMIZACIÓN: Limpieza optimizada de memoria
+   * @private
+   */
+  _optimizedMemoryCleanup() {
+    try {
+      const memoryBefore = tf.memory();
+      
+      // Solo limpiar si hay muchos tensores
+      if (memoryBefore.numTensors > 50) {
+        tf.dispose();
+        
+        const memoryAfter = tf.memory();
+        const memoryFreed = memoryBefore.numBytes - memoryAfter.numBytes;
+        
+        if (this.config.LOGGING.ENABLE_PERFORMANCE_LOG && memoryFreed > 1024) {
+          console.log(`🧧 Limpieza optimizada: ${(memoryFreed / 1024).toFixed(2)}KB liberados`);
+        }
+      }
+      
+      this._updateMemoryStats();
+      
+    } catch (error) {
+      console.warn('⚠️ Error en limpieza optimizada:', error.message);
+    }
+  }
+
+  /**
+   * 🚀 OPTIMIZACIÓN: Actualiza métricas de performance
+   * @private
+   */
+  _updatePerformanceMetrics(inferenceTime) {
+    this.performanceMetrics.inferenceCount++;
+    this.performanceMetrics.totalInferenceTime += inferenceTime;
+    this.performanceMetrics.averageInferenceTime = Math.round(
+      this.performanceMetrics.totalInferenceTime / this.performanceMetrics.inferenceCount
+    );
+    
+    // Detectar memory leaks
+    if (this._detectMemoryLeak()) {
+      this.performanceMetrics.memoryLeaksDetected++;
+    }
+  }
+
+  /**
+   * Compara si dos shapes son iguales
+   * @private
+   */
+  _shapeEquals(shape1, shape2) {
+    if (shape1.length !== shape2.length) return false;
+    
+    for (let i = 0; i < shape1.length; i++) {
+      if (shape1[i] !== shape2[i]) return false;
+    }
+    
+    return true;
+  }
+
+  /**
+   * 🚀 OPTIMIZACIÓN: Obtiene estadísticas completas incluyendo optimizaciones
+   * @returns {Object} Estadísticas completas
+   */
+  getCompleteStats() {
+    this._updateMemoryStats();
+
+    return {
+      ...this.getStats(),
+      performance: {
+        ...this.performanceMetrics,
+        tensorPoolSize: {
+          input: this.tensorPool.inputTensors.length,
+          output: this.tensorPool.outputTensors.length,
+          maxSize: this.tensorPool.maxPoolSize
+        },
+        modelCacheSize: this.modelCache.size,
+        efficiency: {
+          reuseRate: this.performanceMetrics.inferenceCount > 0 
+            ? (this.performanceMetrics.tensorsReused / this.performanceMetrics.inferenceCount * 100).toFixed(2) + '%'
+            : '0%',
+          memoryLeakRate: this.performanceMetrics.inferenceCount > 0
+            ? (this.performanceMetrics.memoryLeaksDetected / this.performanceMetrics.inferenceCount * 100).toFixed(2) + '%'
+            : '0%'
+        }
+      }
+    };
   }
 }
 
